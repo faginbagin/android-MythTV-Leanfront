@@ -111,7 +111,7 @@ public class AsyncMainLoader implements Runnable {
         try {
             runTasks();
         } catch (Throwable e) {
-            e.printStackTrace();
+            Log.e(TAG, CLASS + " AsyncMainLoader.run exception",e);
         }
         finally {
             activity.runOnUiThread(() -> mainFragment.onAsyncLoadFinished(this, categoryList));
@@ -127,7 +127,7 @@ public class AsyncMainLoader implements Runnable {
             buildRows(csr);
             csr.close();
         } catch (Exception ex) {
-            Log.e(TAG, CLASS + " doInBackground exception",ex);
+            Log.e(TAG, CLASS + " AsyncMainLoader.runTasks exception",ex);
         }
     }
 
@@ -380,24 +380,24 @@ public class AsyncMainLoader implements Runnable {
 
         // Iterate through each category entry and add it to the ArrayAdapter.
         while (cursorHasData && !data.isAfterLast()) {
+            try {
+                boolean addToRow = true;
+                int itemType = -1;
+                int rowType = -1;
 
-            boolean addToRow = true;
-            int itemType = -1;
-            int rowType = -1;
+                String recgroup = data.getString(recgroupIndex);
+                int rectype = data.getInt(rectypeIndex);
 
-            String recgroup = data.getString(recgroupIndex);
-            int rectype = data.getInt(rectypeIndex);
+                String category = null;
+                String categorymatch = null;
+                Video video = (Video) mapper.get(data.getPosition());
+                Video dbVideo = video;
 
-            String category = null;
-            String categorymatch = null;
-            Video video = (Video) mapper.get(data.getPosition());
-            Video dbVideo = video;
-
-            // For Rec Group type, only use recordings from that recording group.
-            // categories are titles.
-            if (mType == TYPE_RECGROUP) {
-                category = data.getString(titleIndex);
-                categorymatch = data.getString(titleMatchIndex);
+                // For Rec Group type, only use recordings from that recording group.
+                // categories are titles.
+                if (mType == TYPE_RECGROUP) {
+                    category = data.getString(titleIndex);
+                    categorymatch = data.getString(titleMatchIndex);
 //                if (recgroup != null
 //                        && (context.getString(R.string.all_title) + "\t").equals(mBaseName)) {
 //                    // Do not mix deleted episodes or LiveTV in the All group
@@ -411,227 +411,222 @@ public class AsyncMainLoader implements Runnable {
 //                        continue;
 //                    }
 //                }
-                if (rectype == RECTYPE_RECORDING || rectype == RECTYPE_VIDEO) {
-                    rowType = TYPE_SERIES;
-                    itemType = TYPE_EPISODE;
-                } else if (rectype == RECTYPE_CHANNEL) {
-                    rowType = TYPE_CHANNEL_ALL;
-                    itemType = TYPE_CHANNEL;
-                }
-            }
-
-            // For Top Level type, only use 1 recording from each title
-            // categories are recgroups
-
-            String filename = data.getString(filenameIndex);
-            String[] fileparts;
-            String dirname = null;
-            // itemname is directory name or file name in video part of
-            // top level or video page.
-            String itemname = null;
-            // Split file name and see if it is a directory
-            if (rectype == RECTYPE_VIDEO && filename != null && mType != TYPE_RECGROUP) {
-                String shortName = filename;
-                // itemlevel 0 means there is only one row for all
-                // videos so the first part of the name is the entry
-                // in the row.
-                int itemlevel = 1;
-                if (mType == TYPE_VIDEODIR) {
-                    // itemlevel 1 means there is one row for each
-                    // directory so the second part of the name is the entry
-                    // in the row.
-                    itemlevel = 2;
-                    if (mBaseName.length() == 0)
-                        shortName = filename;
-                    else if (shortName.startsWith(mBaseName + "/"))
-                        shortName = filename.substring(mBaseName.length() + 1);
-                    else {
-                        data.moveToNext();
-                        continue;
+                    if (rectype == RECTYPE_RECORDING || rectype == RECTYPE_VIDEO) {
+                        rowType = TYPE_SERIES;
+                        itemType = TYPE_EPISODE;
+                    } else if (rectype == RECTYPE_CHANNEL) {
+                        rowType = TYPE_CHANNEL_ALL;
+                        itemType = TYPE_CHANNEL;
                     }
                 }
-                fileparts = shortName.split("/");
-                if (fileparts.length == 1 || mType == TYPE_TOPLEVEL) {
-                    itemname = fileparts[0];
-                } else {
-                    dirname = fileparts[0];
-                    itemname = fileparts[1];
-                }
-                if ((fileparts.length <= 2 && mType == TYPE_VIDEODIR)
-                        || fileparts.length == 1)
-                    itemType = TYPE_VIDEO;
-                else
-                    itemType = TYPE_VIDEODIR;
-                if (itemType == TYPE_VIDEODIR && Objects.equals(itemname, currentItem)) {
-                    itemType = TYPE_VIDEO;
-                    addToRow = false;
-                } else
-                    currentItem = itemname;
-            }
 
-            if (mType == TYPE_TOPLEVEL) {
-                if (rectype == RECTYPE_VIDEO) {
-                    category = context.getString(R.string.row_header_videos) + "\t";
-                    categorymatch = category;
-                    rowType = TYPE_VIDEODIR_ALL;
-                } else if (rectype == RECTYPE_RECORDING)
-                    itemType = TYPE_EPISODE;
-                if (rectype == RECTYPE_RECORDING
-                        || rectype == RECTYPE_CHANNEL) {
-                    category = recgroup;
-                    categorymatch = category;
-                    String title;
-                    if (rectype == RECTYPE_CHANNEL)
-                        // TODO translate
-                        title = "Channels\t";
-                    else
-                        title = data.getString(titleIndex);
-                    if (Objects.equals(title, currentItem)) {
-                        addToRow = false;
+                // For Top Level type, only use 1 recording from each title
+                // categories are recgroups
+
+                String filename = data.getString(filenameIndex);
+                String[] fileparts;
+                String dirname = null;
+                // itemname is directory name or file name in video part of
+                // top level or video page.
+                String itemname = null;
+                // Split file name and see if it is a directory
+                if (rectype == RECTYPE_VIDEO && filename != null && mType != TYPE_RECGROUP) {
+                    String shortName = filename;
+                    if (mType == TYPE_VIDEODIR) {
+                        if (mBaseName.length() == 0)
+                            shortName = filename;
+                        else if (shortName.startsWith(mBaseName + "/"))
+                            shortName = filename.substring(mBaseName.length() + 1);
+                        else {
+                            data.moveToNext();
+                            continue;
+                        }
+                    }
+                    fileparts = shortName.split("/");
+                    if (fileparts.length == 1 || mType == TYPE_TOPLEVEL) {
+                        itemname = fileparts[0];
                     } else {
-                        currentItem = title;
-                        rowType = TYPE_RECGROUP;
+                        dirname = fileparts[0];
+                        itemname = fileparts[1];
                     }
-                }
-            }
-
-            // For Video Directory type, only use videos (recgroup null)
-            // category is full directory name.
-            // Only one videos page
-            // First is "all" row, then "root" row, then dir rows
-            // mBaseName = "Videos" String
-            // Display = "Videos" String
-            if (mType == TYPE_VIDEODIR) {
-                category = dirname;
-                categorymatch = category;
-                rowType = TYPE_VIDEODIR;
-            }
-
-            // Change of row
-            if (addToRow && category != null && !Objects.equals(categorymatch, currentCategoryMatch)) {
-                currentRowNum = categoryList.size();
-                rowList = new ArrayList<>();
-                header = new MyHeaderItem(category,
-                        rowType, mBaseName);
-                rowList.add(header);
-                categoryList.add(rowList);
-                currentCategoryMatch = categorymatch;
-            }
-
-            // If a directory, create a placeholder for directory name
-            if (itemType == TYPE_VIDEODIR)
-                video = new Video.VideoBuilder()
-                        .id(-1).title(itemname)
-                        .recordedid(itemname)
-                        .subtitle("")
-                        .bgImageUrl("android.resource://org.mythtv.leanfront/" + R.drawable.background)
-                        .progflags("0")
-                        .build();
-            video.type = itemType;
-
-            // Add video to row
-            if (addToRow && category != null) {
-                Video tVideo = video;
-                if (mType == TYPE_TOPLEVEL && video.rectype == RECTYPE_CHANNEL) {
-                    // Create dummy video for "All Channels"
-                    tVideo = new Video.VideoBuilder()
-                            .id(-1).channel(context.getString(R.string.row_header_channels))
-                            .rectype(RECTYPE_CHANNEL)
-                            .bgImageUrl("android.resource://org.mythtv.leanfront/" + R.drawable.background)
-                            .progflags("0")
-                            .build();
-                    tVideo.type = TYPE_CHANNEL_ALL;
-                }
-                rowList.add(tVideo);
-            }
-
-            // Add video to "Root" row
-            if (addToRow && rootList != null
-                    && category == null) {
-                rootList.add(video);
-            }
-
-            // Add video to "All" row
-            if (addToRow && allSparse != null && rowType != TYPE_VIDEODIR_ALL
-                    && rectype == RECTYPE_RECORDING
-                    && !(mType == TYPE_TOPLEVEL && "Deleted".equals(recgroup))) {
-                int position = 0;
-                String sortKeyStr = data.getString(sortkey);
-                if (sortKeyStr != null) {
-                    try {
-                        Date date = sortKeyFormat.parse(sortKeyStr);
-                        // 525960 minutes in a year
-                        // Get position as number of minutes since 1970
-                        position = (int) (date.getTime() / 60000L);
-                        // Add 70 years in case it is before 1970
-                        position += 36817200;
-                        if ("desc".equals(ascdesc))
-                            position = Integer.MAX_VALUE - position;
-                    } catch (ParseException | NullPointerException e) {
-                        e.printStackTrace();
-                        position = 0;
-                    }
-                }
-                // Make sure we have an empty slot
-                try {
-                    while (allSparse.get(position) != null)
-                        position++;
-                } catch (ArrayIndexOutOfBoundsException e) {
-                }
-                allSparse.put(position, video);
-            }
-
-            // Add to recents row if applicable
-            if (recentsSparse != null
-                    && dbVideo.isRecentViewed()) {
-                // 525960 minutes in a year
-                // Get key as number of minutes since 1970
-                // Will stop working in the year 5982
-                int key = (int) (dbVideo.lastUsed / 60000L);
-                // Add 70 years in case it is before 1970
-                key += 36817200;
-                // descending
-                key = Integer.MAX_VALUE - key;
-                // Make sure we have an empty slot
-                try {
-                    while (recentsSparse.get(key) != null)
-                        key++;
-                } catch (ArrayIndexOutOfBoundsException e) {
+                    if ((fileparts.length <= 2 && mType == TYPE_VIDEODIR)
+                            || fileparts.length == 1)
+                        itemType = TYPE_VIDEO;
+                    else
+                        itemType = TYPE_VIDEODIR;
+                    if (itemType == TYPE_VIDEODIR && Objects.equals(itemname, currentItem)) {
+                        itemType = TYPE_VIDEO;
+                        addToRow = false;
+                    } else
+                        currentItem = itemname;
                 }
 
-                // Check if there is already an entry for that series / directory
-                // If the user does not want duplicates of recent titles that were
-                // watched or deleted
-
-                boolean isDeleted = "Deleted".equals(dbVideo.recGroup);
-                if (recentsTrim) {
-
-                    // If all recently viewed episodes of a series are watched/deleted, show the most
-                    // recently viewed.
-                    // If some recently viewed episodes of a series are watched/deleted and some are not,
-                    // show only the ones not watched/deleted
-
-                    String series = dbVideo.titlematch;
-                    if (series != null) {
-                        for (int fx = 0; fx < recentsSparse.size(); fx++) {
-                            Video fvid = (Video) recentsSparse.get(recentsSparse.keyAt(fx));
-                            boolean fisDeleted = "Deleted".equals(fvid.recGroup);
-                            if (series.equals(fvid.titlematch)) {
-                                int fkey = Integer.MAX_VALUE - ((int) (fvid.lastUsed / 60000L) + 36817200);
-                                if (key < fkey)
-                                    // position is closer to front, delete the other one
-                                    recentsSparse.delete(fkey);
-                                else
-                                    // position is later in list - drop this one
-                                    key = -1;
-                                break;
-                            }
+                if (mType == TYPE_TOPLEVEL) {
+                    if (rectype == RECTYPE_VIDEO) {
+                        category = context.getString(R.string.row_header_videos) + "\t";
+                        categorymatch = category;
+                        rowType = TYPE_VIDEODIR_ALL;
+                    } else if (rectype == RECTYPE_RECORDING)
+                        itemType = TYPE_EPISODE;
+                    if (rectype == RECTYPE_RECORDING
+                            || rectype == RECTYPE_CHANNEL) {
+                        category = recgroup;
+                        categorymatch = category;
+                        String title;
+                        if (rectype == RECTYPE_CHANNEL)
+                            // TODO translate
+                            title = "Channels\t";
+                        else
+                            title = data.getString(titleIndex);
+                        if (Objects.equals(title, currentItem)) {
+                            addToRow = false;
+                        } else {
+                            currentItem = title;
+                            rowType = TYPE_RECGROUP;
                         }
                     }
                 }
 
-                if (key != -1)
-                    recentsSparse.put(key, dbVideo);
+                // For Video Directory type, only use videos (recgroup null)
+                // category is full directory name.
+                // Only one videos page
+                // First is "all" row, then "root" row, then dir rows
+                // mBaseName = "Videos" String
+                // Display = "Videos" String
+                if (mType == TYPE_VIDEODIR) {
+                    category = dirname;
+                    categorymatch = category;
+                    rowType = TYPE_VIDEODIR;
+                }
+
+                // Change of row
+                if (addToRow && category != null && !Objects.equals(categorymatch, currentCategoryMatch)) {
+                    currentRowNum = categoryList.size();
+                    rowList = new ArrayList<>();
+                    header = new MyHeaderItem(category,
+                            rowType, mBaseName);
+                    rowList.add(header);
+                    categoryList.add(rowList);
+                    currentCategoryMatch = categorymatch;
+                }
+
+                // If a directory, create a placeholder for directory name
+                if (itemType == TYPE_VIDEODIR)
+                    video = new Video.VideoBuilder()
+                            .id(-1).title(itemname)
+                            .recordedid(itemname)
+                            .subtitle("")
+                            .bgImageUrl("android.resource://org.mythtv.leanfront/" + R.drawable.background)
+                            .progflags("0")
+                            .build();
+                video.type = itemType;
+
+                // Add video to row
+                if (addToRow && category != null) {
+                    Video tVideo = video;
+                    if (mType == TYPE_TOPLEVEL && video.rectype == RECTYPE_CHANNEL) {
+                        // Create dummy video for "All Channels"
+                        tVideo = new Video.VideoBuilder()
+                                .id(-1).channel(context.getString(R.string.row_header_channels))
+                                .rectype(RECTYPE_CHANNEL)
+                                .bgImageUrl("android.resource://org.mythtv.leanfront/" + R.drawable.background)
+                                .progflags("0")
+                                .build();
+                        tVideo.type = TYPE_CHANNEL_ALL;
+                    }
+                    rowList.add(tVideo);
+                }
+
+                // Add video to "Root" row
+                if (addToRow && rootList != null
+                        && category == null) {
+                    rootList.add(video);
+                }
+
+                // Add video to "All" row
+                if (addToRow && allSparse != null && rowType != TYPE_VIDEODIR_ALL
+                        && rectype == RECTYPE_RECORDING
+                        && !(mType == TYPE_TOPLEVEL && "Deleted".equals(recgroup))) {
+                    int position = 0;
+                    String sortKeyStr = data.getString(sortkey);
+                    if (sortKeyStr != null) {
+                        try {
+                            Date date = sortKeyFormat.parse(sortKeyStr);
+                            // 525960 minutes in a year
+                            // Get position as number of minutes since 1970
+                            position = (int) (date.getTime() / 60000L);
+                            // Add 70 years in case it is before 1970
+                            position += 36817200;
+                            if ("desc".equals(ascdesc))
+                                position = Integer.MAX_VALUE - position;
+                        } catch (ParseException | NullPointerException e) {
+                            e.printStackTrace();
+                            position = 0;
+                        }
+                    }
+                    // Make sure we have an empty slot
+                    try {
+                        while (allSparse.get(position) != null)
+                            position++;
+                    } catch (ArrayIndexOutOfBoundsException e) {
+                    }
+                    allSparse.put(position, video);
+                }
+
+                // Add to recents row if applicable
+                if (recentsSparse != null
+                        && dbVideo.isRecentViewed()) {
+                    // 525960 minutes in a year
+                    // Get key as number of minutes since 1970
+                    // Will stop working in the year 5982
+                    int key = (int) (dbVideo.lastUsed / 60000L);
+                    // Add 70 years in case it is before 1970
+                    key += 36817200;
+                    // descending
+                    key = Integer.MAX_VALUE - key;
+                    // Make sure we have an empty slot
+                    try {
+                        while (recentsSparse.get(key) != null)
+                            key++;
+                    } catch (ArrayIndexOutOfBoundsException e) {
+                    }
+
+                    // Check if there is already an entry for that series / directory
+                    // If the user does not want duplicates of recent titles that were
+                    // watched or deleted
+
+                    boolean isDeleted = "Deleted".equals(dbVideo.recGroup);
+                    if (recentsTrim) {
+
+                        // If all recently viewed episodes of a series are watched/deleted, show the most
+                        // recently viewed.
+                        // If some recently viewed episodes of a series are watched/deleted and some are not,
+                        // show only the ones not watched/deleted
+
+                        String series = dbVideo.titlematch;
+                        if (series != null) {
+                            for (int fx = 0; fx < recentsSparse.size(); fx++) {
+                                Video fvid = (Video) recentsSparse.get(recentsSparse.keyAt(fx));
+                                boolean fisDeleted = "Deleted".equals(fvid.recGroup);
+                                if (series.equals(fvid.titlematch)) {
+                                    int fkey = Integer.MAX_VALUE - ((int) (fvid.lastUsed / 60000L) + 36817200);
+                                    if (key < fkey)
+                                        // position is closer to front, delete the other one
+                                        recentsSparse.delete(fkey);
+                                    else
+                                        // position is later in list - drop this one
+                                        key = -1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (key != -1)
+                        recentsSparse.put(key, dbVideo);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, CLASS + " AsyncMainLoader.run exception",e);
             }
             data.moveToNext();
         }
